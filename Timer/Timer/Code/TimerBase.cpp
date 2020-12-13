@@ -16,6 +16,8 @@ namespace jaf
 
 	void CTimerBase::AddTask(const STimerTask& rTask)
 	{
+		assert(rTask.m_nInterval != 0); // 定时间隔不能为0
+
 		STimerTaskInter task;
 		task.m_timerTask = rTask;
 		task.m_nStartTime = GetNowTime(); // 记录最开始的时间
