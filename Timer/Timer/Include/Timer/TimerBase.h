@@ -11,8 +11,6 @@
 
 namespace jaf
 {
-
-	const long long g_waitMaxTime = 24 * 1000 * 60 * 60; // 定时最大等待时间
 	class CTimerBase :public CTimerInterface
 	{
 	public:
@@ -33,6 +31,9 @@ namespace jaf
 
 		// 定时器工作线程执行函数
 		virtual void Work();
+		// 遍历定时列表，执行达到时间的任务
+		// 返回下一次遍历所需要的时间
+		virtual unsigned __int64 TraverseExecuteTasks();
 		// 执行定时任务
 		virtual void ExecuteTask(const STimerTask& rTask);
 
@@ -46,7 +47,6 @@ namespace jaf
 			STimerTask m_timerTask;
 			unsigned __int64 m_nStartTime = 0; // 用于计算时间间隔的开始时间
 		};
-
 	protected:
 		std::string m_strName; // 定时器名称
 

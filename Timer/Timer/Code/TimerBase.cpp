@@ -66,9 +66,7 @@ namespace jaf
 
 	void CTimerBase::Work()
 	{
-		long long nMinWaitTime = 0; // 所有任务中最小的等待时间，用于计算需要睡眠多久
-		long long hadWaitTime = 0; // 一个任务已经等待了的时间
-		long long nNeedWaitTime = 0; // 一个任务还需要等待的时间
+		unsigned __int64 nMinWaitTime = 0; // 所有任务中最小的等待时间，用于计算下一次执行需要多久
 		std::unique_lock<std::mutex> lks(m_timerLock);
 		while (m_bRun)
 		{
@@ -78,36 +76,59 @@ namespace jaf
 				return;
 			}
 
-			nMinWaitTime = g_waitMaxTime;
-			unsigned __int64 nNowTime = GetNowTime();
-			for (std::list<STimerTaskInter>::iterator it = m_listTimerTask.begin(); it != m_listTimerTask.end(); ++it)
+			nMinWaitTime = TraverseExecuteTasks();
+
+			if (m_listTimerTask.empty()) // 如果没有任务了，就退出
 			{
-				hadWaitTime = nNowTime - it->m_nStartTime; // 已经等待了的时间
-				if (hadWaitTime < 0) // 不能小于0
-				{
-					hadWaitTime = 0;
-				}
+				break;
+			}
+		}
+	}
 
-				if ((hadWaitTime + m_nLeadTime) >= it->m_timerTask.m_nInterval) // 时间间隔大于指定间隔时执行 可以提前5ms执行
-				{
-					it->m_nStartTime = nNowTime;
-					ExecuteTask(it->m_timerTask);
-					nNeedWaitTime = it->m_timerTask.m_nInterval;
-				}
-				else
-				{
-					nNeedWaitTime = it->m_timerTask.m_nInterval - hadWaitTime; // 一个任务还需要等待的时间
-				}
-				assert(nNeedWaitTime >= 0); // 按照逻辑，nNeedWaitTime必然大于0
+	unsigned __int64 CTimerBase::TraverseExecuteTasks()
+	{
+		unsigned __int64 nMinWaitTime = 0xffffffffffffffff; // 所有任务中最小的等待时间，用于计算下一次执行需要多久
+		__int64 hadWaitTime = 0; // 一个任务已经等待了的时间
+		__int64 nNeedWaitTime = 0; // 一个任务还需要等待的时间
 
-				// 找到最小的需要等待的时间
-				if (nNeedWaitTime < nMinWaitTime)
-				{
-					nMinWaitTime = nNeedWaitTime;
-				}
+		unsigned __int64 nNowTime = GetNowTime();
+		for (std::list<STimerTaskInter>::iterator it = m_listTimerTask.begin(); it != m_listTimerTask.end();)
+		{
+			hadWaitTime = nNowTime - it->m_nStartTime; // 已经等待了的时间
+			if (hadWaitTime < 0) // 不能小于0
+			{
+				hadWaitTime = 0;
 			}
 
+			if ((hadWaitTime + m_nLeadTime) >= it->m_timerTask.m_nInterval) // 时间间隔大于指定间隔时执行 可以提前m_nLeadTime毫秒执行
+			{
+				ExecuteTask(it->m_timerTask);
+				it->m_nStartTime = nNowTime;
+				if (!it->m_timerTask.m_bLoop) // 如果定时器只执行一次，则移除
+				{
+					it = m_listTimerTask.erase(it);
+					continue;
+				}
+
+				nNeedWaitTime = it->m_timerTask.m_nInterval; // 一个任务还需要等待的时间
+			}
+			else
+			{
+				nNeedWaitTime = it->m_timerTask.m_nInterval - hadWaitTime; // 一个任务还需要等待的时间
+			}
+			assert(nNeedWaitTime > 0); // 按照逻辑，nNeedWaitTime必然大于0
+
+			// 找到最小的需要等待的时间
+			if ((unsigned __int64)nNeedWaitTime < nMinWaitTime)
+			{
+				nMinWaitTime = nNeedWaitTime;
+			}
+
+			++it;
 		}
+
+		assert(nMinWaitTime > 0); // nMinWaitTime必然大于0
+		return nMinWaitTime;
 	}
 
 	void CTimerBase::ExecuteTask(const STimerTask& rTask)
