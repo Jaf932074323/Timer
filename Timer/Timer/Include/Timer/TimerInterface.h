@@ -25,9 +25,15 @@ namespace jaf
 		virtual ~CTimerInterface() {};
 
 		// 添加定时任务
-		virtual void AddTask(const STimerTask& rTask) = 0;
+		// nTimeId 定时Id，不能为0
+		// rTask 定时任务信息
+		// 返回定时任务，返回0时表示创建定时任务失败
+		virtual unsigned int AddTask(unsigned int nTimeId, const STimerTask& rTask) = 0;
 		// 清除所有定时任务
 		virtual void Clear() = 0;
+		// 移除一个定时任务
+		// nTimeId 要移除的定时任务的Id
+		virtual void Remove(unsigned int nTimeId) = 0;
 
 		// 设置定时的提前量，对于给定的任务，可以提前一定时间执行，单位毫秒
 		virtual void SetLeadTime(unsigned int nLeadTime)

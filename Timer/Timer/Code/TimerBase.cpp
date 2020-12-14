@@ -14,9 +14,13 @@ namespace jaf
 		Stop();
 	}
 
-	void CTimerBase::AddTask(const STimerTask& rTask)
+	unsigned int CTimerBase::AddTask(unsigned int nTimeId, const STimerTask& rTask)
 	{
 		assert(rTask.m_nInterval != 0); // 定时间隔不能为0
+		if (nTimeId == 0) // 定时Id不能为0
+		{
+			return 0;
+		}
 
 		STimerTaskInter task;
 		task.m_timerTask = rTask;
@@ -24,19 +28,32 @@ namespace jaf
 
 		{
 			std::unique_lock<std::mutex> lks(m_timerLock);
-			m_listTimerTask.push_back(task); // 在列表中加入定时任务
+			if (m_mapTimerTask.find(nTimeId) != m_mapTimerTask.end())
+			{
+				return 0;
+			}
+			m_mapTimerTask.insert(std::make_pair(nTimeId, task));
 		}
 
 		Start();
-
 		m_workCondition.notify_all();
+
+		return nTimeId;
 	}
 
 	void CTimerBase::Clear()
 	{
 		Stop();
 		std::unique_lock<std::mutex> lks(m_timerLock);
-		m_listTimerTask.clear();
+		m_mapTimerTask.clear();
+	}
+
+	void CTimerBase::Remove(unsigned int nTimeId)
+	{
+		std::unique_lock<std::mutex> lks(m_timerLock);
+		m_mapTimerTask.erase(nTimeId);
+
+		m_workCondition.notify_all(); // 激活工作线程，避免工作线程阻塞
 	}
 
 	void CTimerBase::Start()
@@ -80,7 +97,7 @@ namespace jaf
 
 			nMinWaitTime = TraverseExecuteTasks();
 
-			if (m_listTimerTask.empty()) // 如果没有任务了，就退出
+			if (m_mapTimerTask.empty()) // 如果没有任务了，就退出
 			{
 				break;
 			}
@@ -94,29 +111,30 @@ namespace jaf
 		__int64 nNeedWaitTime = 0; // 一个任务还需要等待的时间
 
 		unsigned __int64 nNowTime = GetNowTime();
-		for (std::list<STimerTaskInter>::iterator it = m_listTimerTask.begin(); it != m_listTimerTask.end();)
+		for (std::map<unsigned int, STimerTaskInter>::iterator it = m_mapTimerTask.begin(); it != m_mapTimerTask.end();)
 		{
-			hadWaitTime = nNowTime - it->m_nStartTime; // 已经等待了的时间
+			STimerTaskInter& rTimerTaskInter = it->second;
+			hadWaitTime = nNowTime - rTimerTaskInter.m_nStartTime; // 已经等待了的时间
 			if (hadWaitTime < 0) // 不能小于0
 			{
 				hadWaitTime = 0;
 			}
 
-			if ((hadWaitTime + m_nLeadTime) >= it->m_timerTask.m_nInterval) // 时间间隔大于指定间隔时执行 可以提前m_nLeadTime毫秒执行
+			if ((hadWaitTime + m_nLeadTime) >= rTimerTaskInter.m_timerTask.m_nInterval) // 时间间隔大于指定间隔时执行 可以提前m_nLeadTime毫秒执行
 			{
-				ExecuteTask(it->m_timerTask);
-				it->m_nStartTime = nNowTime;
-				if (!it->m_timerTask.m_bLoop) // 如果定时器只执行一次，则移除
+				ExecuteTask(rTimerTaskInter.m_timerTask);
+				rTimerTaskInter.m_nStartTime = nNowTime;
+				if (!rTimerTaskInter.m_timerTask.m_bLoop) // 如果定时器只执行一次，则移除
 				{
-					it = m_listTimerTask.erase(it);
+					it = m_mapTimerTask.erase(it);
 					continue;
 				}
 
-				nNeedWaitTime = it->m_timerTask.m_nInterval; // 一个任务还需要等待的时间
+				nNeedWaitTime = rTimerTaskInter.m_timerTask.m_nInterval; // 一个任务还需要等待的时间
 			}
 			else
 			{
-				nNeedWaitTime = it->m_timerTask.m_nInterval - hadWaitTime; // 一个任务还需要等待的时间
+				nNeedWaitTime = rTimerTaskInter.m_timerTask.m_nInterval - hadWaitTime; // 一个任务还需要等待的时间
 			}
 			assert(nNeedWaitTime > 0); // 按照逻辑，nNeedWaitTime必然大于0
 

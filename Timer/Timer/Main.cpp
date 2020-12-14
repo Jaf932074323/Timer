@@ -31,17 +31,19 @@ int main()
 	task.m_nInterval = 5000; // 定时5秒
 	task.m_bLoop = false; // 不循环定时
 	task.m_fun = std::bind(&TimerTest, n); // 用全局函数作为定时执行函数
-	timer.AddTask(task); // 添加第一个定时任务
+	timer.AddTask(1,task); // 添加第一个定时任务
 
 	task.m_nInterval = 1000; // 定时1秒
 	task.m_bLoop = true; // 循环定时
 	CTimerTest timerTest;
 	task.m_fun = std::bind(&CTimerTest::TimerTest, &timerTest, n); // 用类的成员函数作为定时执行函数
-	timer.AddTask(task); // 添加第2个定时任务
+	timer.AddTask(2,task); // 添加第2个定时任务
+
 
 	std::cout << "输入任意字符停止定时" << std::endl;
 	getchar();
-	timer.Clear();
+	timer.Remove(2);
+	//timer.Clear();
 
 	system("pause");
 	return 0;
